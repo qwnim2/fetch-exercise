@@ -5,8 +5,11 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	// "errors"
 )
+
+var points = make(map[string]int)
 
 type Item struct {
 	ShortDescription string `json:"shortDescription"`
@@ -22,7 +25,9 @@ type Receipt struct {
 }
 
 func allReceipts(c *gin.Context) {
-
+	// dictionary["hello"] = 2
+	id := uuid.New()
+	points[id.String()] = 1
 	type Items []Item
 
 	items := Items{
@@ -39,6 +44,7 @@ func allReceipts(c *gin.Context) {
 	}
 
 	fmt.Println("Endpoint Hit: All Receipts Endpoint")
+	fmt.Println(points)
 	c.IndentedJSON(http.StatusOK, receipts)
 }
 
