@@ -2,28 +2,26 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
-	"encoding/json"
-	// "github.com/gin-gonic/gin"
+
+	"github.com/gin-gonic/gin"
 	// "errors"
 )
 
-type Item struct{
+type Item struct {
 	ShortDescription string `json:"shortDescription"`
-	Price string `json:"price"`
+	Price            string `json:"price"`
 }
 
-type Receipt struct{
-	Retailer string `json:"retailer"`
+type Receipt struct {
+	Retailer     string `json:"retailer"`
 	PurchaseDate string `json:"purchaseDate"`
 	PurchaseTime string `json:"purchaseTime"`
-	Total string `json:"total"`
-	Items []Item `json:"items"`
+	Total        string `json:"total"`
+	Items        []Item `json:"items"`
 }
 
-
-func allReceipts(w http.ResponseWriter, r *http.Request) {
+func allReceipts(c *gin.Context) {
 
 	type Items []Item
 
@@ -33,27 +31,20 @@ func allReceipts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	receipts := Receipt{
-		Retailer: "Target",
+		Retailer:     "Target",
 		PurchaseDate: "2022-01-02",
 		PurchaseTime: "13:13",
-		Total: "1.25",
-		Items: items,
+		Total:        "1.25",
+		Items:        items,
 	}
 
 	fmt.Println("Endpoint Hit: All Receipts Endpoint")
-	json.NewEncoder(w).Encode(receipts)
+	c.IndentedJSON(http.StatusOK, receipts)
 }
 
-func homePage(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, "Homepage Endpoint Hit")
-}
+func main() {
+	router := gin.Default()
+	router.GET("/receipts", allReceipts)
+	router.Run("localhost:8801")
 
-func handleRequests() {
-	http.HandleFunc("/", homePage)
-	http.HandleFunc("/receipts", allReceipts)
-	log.Fatal(http.ListenAndServe(":8801", nil))
-}
-
-func main(){
-	handleRequests()
 }
