@@ -27,29 +27,6 @@ type Receipt struct {
 	Items        []Item `json:"items"`
 }
 
-// func allReceipts(c *gin.Context) {
-// 	// dictionary["hello"] = 2
-// 	id := uuid.New()
-// 	points[id.String()] = 1
-// 	type Items []Item
-
-// 	items := Items{
-// 		Item{ShortDescription: "Pepsi - 12-oz", Price: "1.25"},
-// 		Item{ShortDescription: "qwe - 5-oz", Price: "2.25"},
-// 	}
-
-// 	receipts := Receipt{
-// 		Retailer:     "Target",
-// 		PurchaseDate: "2022-01-02",
-// 		PurchaseTime: "13:13",
-// 		Total:        "1.25",
-// 		Items:        items,
-// 	}
-
-// 	fmt.Println("Endpoint Hit: All Receipts Endpoint")
-// 	c.IndentedJSON(http.StatusOK, receipts)
-// }
-
 // Process endpoint
 func processReceipt(c *gin.Context) {
 	id := uuid.New()
@@ -59,12 +36,8 @@ func processReceipt(c *gin.Context) {
 		return
 	}
 
+	// initialize points as 0
 	pts := 0
-	// fmt.Println(receipt.Retailer)
-	// fmt.Println(receipt.PurchaseDate)
-	// fmt.Println(receipt.PurchaseTime)
-	// fmt.Println(receipt.Total)
-	// fmt.Println(receipt.Items)
 
 	// every alphanumeric retailer name
 	count := 0
@@ -74,7 +47,7 @@ func processReceipt(c *gin.Context) {
 		}
 	}
 	pts += count
-	fmt.Println(pts)
+	fmt.Println("  Alphanumeric:                    ", count)
 
 	// total round
 	t, err := strconv.ParseFloat(receipt.Total, 64)
@@ -82,26 +55,29 @@ func processReceipt(c *gin.Context) {
 		fmt.Println("Error parsing float: ", err)
 		return
 	}
-	// fmt.Println(int(t))
 	if t == math.Trunc(t) {
 		pts += 50
+		fmt.Println("  Round Total:                     50")
+	} else {
+		fmt.Println("  Round Total:                      0")
 	}
-
-	fmt.Println(pts)
 
 	// multiple of 0.25
 	if 4*t == math.Trunc(4*t) {
 		pts += 25
+		fmt.Println("  Multiple of 0.25:                25")
+	} else {
+		fmt.Println("  Multiple of 0.25:                 0")
 	}
-	fmt.Println(pts)
 
 	// 5 points for each pair
 	pairs := 0
 	pairs += int(len(receipt.Items) / 2)
 	pts += pairs * 5
-	fmt.Println(pts)
+	fmt.Println("  5 points each pair:              ", pairs*5)
 
 	// desc multiple of 3
+	bonus := 0
 	for _, item := range receipt.Items {
 		desc := item.ShortDescription
 		priceStr := item.Price
@@ -115,10 +91,11 @@ func processReceipt(c *gin.Context) {
 		}
 
 		if length%3 == 0 {
-			pts += int(math.Ceil(price * 0.2))
+			bonus += int(math.Ceil(price * 0.2))
 		}
 	}
-	fmt.Println(pts)
+	pts += bonus
+	fmt.Println("  Desc length multiple of 3:       ", bonus)
 
 	// odd day
 	dayStr := receipt.PurchaseDate[len(receipt.PurchaseDate)-2:]
@@ -128,8 +105,10 @@ func processReceipt(c *gin.Context) {
 	}
 	if day%2 == 1 {
 		pts += 6
+		fmt.Println("  Odd day:                          6")
+	} else {
+		fmt.Println("  Odd day:                          0")
 	}
-	fmt.Println(pts)
 
 	// between 2pm & 4pm
 	time := strings.Split(receipt.PurchaseTime, ":")
@@ -137,10 +116,15 @@ func processReceipt(c *gin.Context) {
 	min, _ := strconv.Atoi(time[1])
 	if (hour == 14 && min > 0) || (hour > 14 && hour < 16) {
 		pts += 10
+		fmt.Println("  After 2:00pm and before 4:00pm:  10")
+	} else {
+		fmt.Println("  After 2:00pm and before 4:00pm:   0")
 	}
-	fmt.Println(pts)
+
 	// c.IndentedJSON(http.StatusCreated, receipt)
 	points[id.String()] = pts
+	fmt.Println("                                  ===")
+	fmt.Println("  Points:                         ", pts)
 	c.JSON(http.StatusOK, gin.H{"id": id})
 }
 
@@ -158,9 +142,7 @@ func getPoints(c *gin.Context) {
 
 func main() {
 	router := gin.Default()
-	// router.GET("/receipts", allReceipts)
 	router.POST("/processReceipt", processReceipt)
 	router.GET("/receipts/:id/points", getPoints)
 	router.Run("localhost:8801")
-
 }
