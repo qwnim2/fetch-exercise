@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/gin-gonic/gin"
@@ -15,116 +17,154 @@ import (
 var points = make(map[string]int)
 
 type Item struct {
-	ShortDescription string `json:"shortDescription"`
-	Price            string `json:"price"`
+	ShortDescription string `json:"shortDescription" binding:"required"`
+	Price            string `json:"price" binding:"required,regexp=^[0-9]+\\.[0-9]{2}$"`
 }
 
 type Receipt struct {
-	Retailer     string `json:"retailer"`
-	PurchaseDate string `json:"purchaseDate"`
-	PurchaseTime string `json:"purchaseTime"`
-	Total        string `json:"total"`
-	Items        []Item `json:"items"`
+	Retailer     string `json:"retailer" binding:"required"`
+	PurchaseDate string `json:"purchaseDate" binding:"required"`
+	PurchaseTime string `json:"purchaseTime" binding:"required"`
+	Total        string `json:"total" binding:"required"`
+	Items        []Item `json:"items" binding:"required,min=1"`
+}
+
+func validateReceipt(r Receipt) error {
+
+	retailerPattern := regexp.MustCompile(`^[\w\s\-&]+$`)
+	if !retailerPattern.MatchString(r.Retailer) {
+		return fmt.Errorf("invalid retailer")
+	}
+
+	decimalRegex := regexp.MustCompile(`^[0-9]+\.[0-9]{2}$`)
+	if !decimalRegex.MatchString(r.Total) {
+		return fmt.Errorf("invalid total")
+	}
+	// check date
+	if _, err := time.Parse("2006-01-02", r.PurchaseDate); err != nil {
+		return fmt.Errorf("invalid date")
+	}
+
+	// check time
+	if _, err := time.Parse("15:04", r.PurchaseTime); err != nil {
+		return fmt.Errorf("invalid time")
+	}
+
+	// check shortDescription and price
+	itemDescPattern := regexp.MustCompile(`^[\w\s\-]+$`)
+	for _, i := range r.Items {
+		if !itemDescPattern.MatchString(i.ShortDescription) {
+			return fmt.Errorf("invalid description")
+		}
+		if !decimalRegex.MatchString(i.Price) {
+			return fmt.Errorf("invalid price")
+		}
+	}
+
+	return nil
 }
 
 // Process endpoint
 func processReceipt(c *gin.Context) {
-	id := uuid.New()
-
 	var receipt Receipt
-	if err := c.BindJSON(&receipt); err != nil {
+	if err := c.ShouldBindJSON(&receipt); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"BadRequest": "The receipt is invalid."})
 		return
 	}
 
-	// initialize points as 0
+	if err := validateReceipt(receipt); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"BadRequest": "The receipt is invalid."})
+		return
+	}
+
+	id := uuid.New()
 	pts := 0
 
-	// every alphanumeric retailer name
-	count := 0
-	for _, c := range receipt.Retailer {
-		if unicode.IsDigit(c) || unicode.IsLetter(c) {
-			count += 1
+	// Count alphanumeric chars in the retailer name
+	alphanumericCount := 0
+	for _, r := range receipt.Retailer {
+		if unicode.IsDigit(r) || unicode.IsLetter(r) {
+			alphanumericCount += 1
 		}
 	}
-	pts += count
-	fmt.Println("  Alphanumeric:                    ", count)
+	pts += alphanumericCount
 
-	// total round
-	t, err := strconv.ParseFloat(receipt.Total, 64)
+	// if total is round
+	totalFloat, err := strconv.ParseFloat(receipt.Total, 64)
 	if err != nil {
 		fmt.Println("Error parsing float: ", err)
 		return
 	}
-	if t == math.Trunc(t) {
-		pts += 50
-		fmt.Println("  Round Total:                     50")
-	} else {
-		fmt.Println("  Round Total:                      0")
+	roundPoints := 0
+	if totalFloat == math.Trunc(totalFloat) {
+		roundPoints = 50
 	}
+	pts += roundPoints
 
-	// multiple of 0.25
-	if 4*t == math.Trunc(4*t) {
-		pts += 25
-		fmt.Println("  Multiple of 0.25:                25")
-	} else {
-		fmt.Println("  Multiple of 0.25:                 0")
+	// if total is multiple of 0.25
+	multipleOfQuarterPoints := 0
+	if 4*totalFloat == math.Trunc(4*totalFloat) {
+		multipleOfQuarterPoints = 25
 	}
+	pts += multipleOfQuarterPoints
 
 	// 5 points for each pair
-	pairs := 0
-	pairs += int(len(receipt.Items) / 2)
-	pts += pairs * 5
-	fmt.Println("  5 points each pair:              ", pairs*5)
+	pairCount := len(receipt.Items) / 2
+	pairPoints := pairCount * 5
+	pts += pairPoints
 
-	// desc multiple of 3
-	bonus := 0
+	// Desc len multiple of 3
+	descBonus := 0
 	for _, item := range receipt.Items {
-		desc := item.ShortDescription
-		priceStr := item.Price
-
-		trimmedDesc := strings.TrimSpace(desc)
+		trimmedDesc := strings.TrimSpace(item.ShortDescription)
 		length := len(trimmedDesc)
 
-		price, err := strconv.ParseFloat(priceStr, 64)
+		price, err := strconv.ParseFloat(item.Price, 64)
 		if err != nil {
 			return
 		}
 
 		if length%3 == 0 {
-			bonus += int(math.Ceil(price * 0.2))
+			descBonus += int(math.Ceil(price * 0.2))
 		}
 	}
-	pts += bonus
-	fmt.Println("  Desc length multiple of 3:       ", bonus)
+	pts += descBonus
 
-	// odd day
+	// Odd day
 	dayStr := receipt.PurchaseDate[len(receipt.PurchaseDate)-2:]
 	day, err := strconv.Atoi(dayStr)
 	if err != nil {
 		return
 	}
+	oddDayPoints := 0
 	if day%2 == 1 {
-		pts += 6
-		fmt.Println("  Odd day:                          6")
-	} else {
-		fmt.Println("  Odd day:                          0")
+		oddDayPoints = 6
 	}
+	pts += oddDayPoints
 
-	// between 2pm & 4pm
-	time := strings.Split(receipt.PurchaseTime, ":")
-	hour, _ := strconv.Atoi(time[0])
-	min, _ := strconv.Atoi(time[1])
+	// After 2 before 4
+	timeParts := strings.Split(receipt.PurchaseTime, ":")
+	hour, _ := strconv.Atoi(timeParts[0])
+	min, _ := strconv.Atoi(timeParts[1])
+	timePoints := 0
 	if (hour == 14 && min > 0) || (hour > 14 && hour < 16) {
-		pts += 10
-		fmt.Println("  After 2:00pm and before 4:00pm:  10")
-	} else {
-		fmt.Println("  After 2:00pm and before 4:00pm:   0")
+		timePoints = 10
 	}
+	pts += timePoints
 
-	// c.IndentedJSON(http.StatusCreated, receipt)
 	points[id.String()] = pts
-	fmt.Println("                                  ===")
-	fmt.Println("  Points:                         ", pts)
+
+	fmt.Println("Points Breakdown:")
+	fmt.Printf("  Alphanumeric:                    %d\n", alphanumericCount)
+	fmt.Printf("  Round Total:                     %d\n", roundPoints)
+	fmt.Printf("  Multiple of 0.25:                %d\n", multipleOfQuarterPoints)
+	fmt.Printf("  5 points each pair:              %d\n", pairPoints)
+	fmt.Printf("  Desc length multiple of 3:       %d\n", descBonus)
+	fmt.Printf("  Odd day:                         %d\n", oddDayPoints)
+	fmt.Printf("  After 2:00pm and before 4:00pm:  %d\n", timePoints)
+	fmt.Println("--------------------------------------")
+	fmt.Printf("Total Points:                      %d\n", pts)
+
 	c.JSON(http.StatusOK, gin.H{"id": id})
 }
 
@@ -134,6 +174,7 @@ func getPoints(c *gin.Context) {
 
 	pts, exist := points[id]
 	if !exist {
+		c.JSON(http.StatusNotFound, gin.H{"NotFound": "No receipt found for that ID"})
 		return
 	}
 
