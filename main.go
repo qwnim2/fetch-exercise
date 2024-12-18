@@ -183,7 +183,7 @@ func getPoints(c *gin.Context) {
 
 func main() {
 	router := gin.Default()
-	router.POST("/processReceipt", processReceipt)
+	router.POST("/receipts/process", processReceipt)
 	router.GET("/receipts/:id/points", getPoints)
 	router.Run("localhost:8801")
 }
