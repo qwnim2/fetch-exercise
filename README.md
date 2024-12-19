@@ -32,9 +32,9 @@ This application is a receipt processing service. Submit a receipt using POST re
 
 2. **GET `/receipts/{id}/points`**
    
-   **Path Example: **
-   ```
+   **Path Example:**
    The unique ID returned from the POST /processReceipt call
+   ```
    localhost:8801/receipts/c1bc44bc-3d6e-423c-a27c-6bda660a921f/points
    ```
 
